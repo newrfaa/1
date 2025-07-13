@@ -3,78 +3,95 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import linprog
 
-st.title("📈 Optimasi Produksi Banner & Brosur")
+st.title("📊 Aplikasi Optimasi Produksi (Manual Input)")
 
-st.markdown("""
-Aplikasi ini menentukan kombinasi optimal produksi banner dan brosur
-untuk memaksimalkan keuntungan, berdasarkan keterbatasan sumber daya (mesin, bahan baku, dan tenaga kerja).
-""")
+st.markdown("Masukkan parameter produksi dan batasan sumber daya untuk menentukan kombinasi produksi optimal dua produk (x dan y).")
 
-# Data sesuai dokumen
-profit_banner = 90000
-profit_brosur = 20000
+st.header("🧾 Input Data Produksi")
 
-# Kendala kapasitas
-mesin = 180   # x + 0.5y ≤ 180 → akan cocok dengan x=60, y=100
-bahan_baku = 400  # 2x + 2y ≤ 400
-tenaga_kerja = 220  # 2x + 1y ≤ 220
+col1, col2 = st.columns(2)
 
-# Fungsi objektif
-c = [-profit_banner, -profit_brosur]  # Negatif karena linprog = minimisasi
+with col1:
+    profit_x = st.number_input("Keuntungan per unit produk x (contoh: 90000)", value=90000)
+    mesin_x = st.number_input("Jam mesin per unit produk x", value=1.0)
+    bahan_x = st.number_input("Bahan baku per unit produk x", value=2.0)
+    tenaga_x = st.number_input("Jam kerja per unit produk x", value=2.0)
 
-# Kendala
+with col2:
+    profit_y = st.number_input("Keuntungan per unit produk y (contoh: 20000)", value=20000)
+    mesin_y = st.number_input("Jam mesin per unit produk y", value=0.5)
+    bahan_y = st.number_input("Bahan baku per unit produk y", value=2.0)
+    tenaga_y = st.number_input("Jam kerja per unit produk y", value=1.0)
+
+st.header("📦 Batasan Sumber Daya (Maksimum)")
+max_mesin = st.number_input("Total jam mesin tersedia", value=180.0)
+max_bahan = st.number_input("Total bahan baku tersedia", value=400.0)
+max_tenaga = st.number_input("Total jam tenaga kerja tersedia", value=220.0)
+
+# Model LP
+c = [-profit_x, -profit_y]
+
 A = [
-    [1, 0.5],     # Waktu mesin
-    [2, 2],       # Bahan baku
-    [2, 1]        # Tenaga kerja
+    [mesin_x, mesin_y],
+    [bahan_x, bahan_y],
+    [tenaga_x, tenaga_y]
 ]
-b = [mesin, bahan_baku, tenaga_kerja]
+b = [max_mesin, max_bahan, max_tenaga]
 bounds = [(0, None), (0, None)]
 
-# Solusi LP
+# Solve
 res = linprog(c, A_ub=A, b_ub=b, bounds=bounds, method="highs")
 
 if res.success:
     x, y = res.x
     z = -res.fun
 
-    st.subheader("✅ Hasil Optimasi Produksi")
-    st.write(f"Banner (x): **{x:.0f} unit**")
-    st.write(f"Brosur (y): **{y:.0f} unit**")
-    st.write(f"Keuntungan Maksimal: **Rp {z:,.0f}**")
+    st.success("✅ Optimasi Berhasil")
+    st.write(f"Jumlah produk x (contoh: Banner): **{x:.0f} unit**")
+    st.write(f"Jumlah produk y (contoh: Brosur): **{y:.0f} unit**")
+    st.write(f"Total Keuntungan Maksimum: **Rp {z:,.0f}**")
 
-    # Grafik Wilayah Feasible
-    st.subheader("📊 Grafik Daerah Solusi")
+    # Visualisasi
+    st.subheader("📈 Visualisasi Daerah Solusi dan Titik Optimal")
+
     fig, ax = plt.subplots()
-
     x_vals = np.linspace(0, 100, 400)
 
-    # Setiap garis batas kendala
-    y1 = (mesin - 1*x_vals) / 0.5       # mesin
-    y2 = (bahan_baku - 2*x_vals) / 2    # bahan baku
-    y3 = (tenaga_kerja - 2*x_vals)      # tenaga kerja
+    try:
+        y_mesin = (max_mesin - mesin_x * x_vals) / mesin_y
+    except ZeroDivisionError:
+        y_mesin = np.full_like(x_vals, np.inf)
 
-    y_vals = np.minimum.reduce([y1, y2, y3])
-    y_vals = np.maximum(y_vals, 0)
+    try:
+        y_bahan = (max_bahan - bahan_x * x_vals) / bahan_y
+    except ZeroDivisionError:
+        y_bahan = np.full_like(x_vals, np.inf)
 
-    ax.plot(x_vals, y1, label="Mesin: x + 0.5y ≤ 180")
-    ax.plot(x_vals, y2, label="Bahan: 2x + 2y ≤ 400")
-    ax.plot(x_vals, y3, label="Tenaga: 2x + y ≤ 220")
+    try:
+        y_tenaga = (max_tenaga - tenaga_x * x_vals) / tenaga_y
+    except ZeroDivisionError:
+        y_tenaga = np.full_like(x_vals, np.inf)
 
-    ax.fill_between(x_vals, 0, y_vals, color="lightblue", alpha=0.5, label="Daerah Feasible")
+    y_min = np.minimum(np.minimum(y_mesin, y_bahan), y_tenaga)
+    y_min = np.maximum(y_min, 0)
 
-    # Titik optimal
+    ax.plot(x_vals, y_mesin, label="Kendala Mesin")
+    ax.plot(x_vals, y_bahan, label="Kendala Bahan Baku")
+    ax.plot(x_vals, y_tenaga, label="Kendala Tenaga Kerja")
+
+    ax.fill_between(x_vals, 0, y_min, color="skyblue", alpha=0.5, label="Daerah Feasible")
+
     ax.plot(x, y, 'ro', label=f"Titik Optimal ({x:.0f}, {y:.0f})")
-    ax.annotate(f"({x:.0f}, {y:.0f})", (x, y), textcoords="offset points", xytext=(-15,10), color='red')
+    ax.annotate(f"({x:.0f}, {y:.0f})", (x, y), textcoords="offset points", xytext=(-10, 10), color="red")
 
-    ax.set_xlim(0, 100)
-    ax.set_ylim(0, 150)
-    ax.set_xlabel("Jumlah Banner (x)")
-    ax.set_ylabel("Jumlah Brosur (y)")
-    ax.set_title("Visualisasi Optimasi Produksi")
+    ax.set_xlabel("Produk x")
+    ax.set_ylabel("Produk y")
+    ax.set_xlim(0, max(100, x + 10))
+    ax.set_ylim(0, max(100, y + 10))
     ax.grid(True)
+    ax.set_title("Grafik Optimasi Produksi")
     ax.legend()
-    st.pyplot(fig)
 
+    st.pyplot(fig)
 else:
-    st.error("Optimasi gagal. Silakan periksa parameter.")
+    st.error("❌ Optimasi gagal. Cek kembali input kendala dan parameter.")
